@@ -36,38 +36,35 @@ class TIA_client(object):
     def check_protocol(self):
         """Returns True if server supports the protocol version implemented by this client."""
         self.sock.sendall("TiA 1.0\nCheckProtocolVersion\n\n")
-        tia_version = self.__readmsgline()  # Contains "TiA 1.0\n"
-        status = self.__readmsgline()  # Contains "OK" or "Error"
+        tia_version = self.__recv_until()  # Contains "TiA 1.0\n"
+        status = self.__recv_until()  # Contains "OK" or "Error"
         self.sock.recv(1)
-        if status == "OK":
+        if status.strip() == "OK":
             return True
         else:
             return False
     
-    def __readmsgline(self):  # FIXME: Single _ or double __? What's the correct way to mark this function as "private"?
-        """Reads one line (until "\n") of the stream."""
-        line = ""
-        while True:
-            msg = self.sock.recv(1)  # Read 1 byte
-            if msg == "\n":
-                return line
-            else:
-                line += msg
+    def __recv_until(self, suffix="\n"):  # FIXME: Single _ or double __? What's the correct way to mark this function as "private"?
+        """Reads from socket until the character suffix is in the stream."""
+        msg = ""
+        while not msg.endswith(suffix):
+            data = self.sock.recv(1)  # Read a fixed number of bytes
+            if not data:
+                raise EOFError("Socket closed before receiving the delimiter.".format(suffix))
+            msg += data
+        return msg
     
     def get_metainfo(self):
         """Retrieves meta information from the server."""
         self.sock.sendall("TiA 1.0\nGetMetaInfo\n\n")
         
-        tia_version = self.__readmsgline()  # Contains "TiA 1.0\n"
-        print tia_version
-        msg = self.__readmsgline()  # Contains "TiA 1.0\n"  # Contains "MetaInfo\n"
-        print msg
-        msg = self.__readmsgline()  # Contains "Content-Length:xxx\n", where xxx is the number of bytes that follow
+        tia_version = self.__recv_until().strip()  # Contains "TiA 1.0\n" (remove trailing "\n")
+        msg = self.__recv_until().strip()  # Contains "TiA 1.0\n"  # Contains "MetaInfo\n" (remove trailing "\n")
+        msg = self.__recv_until().strip()  # Contains "Content-Length:xxx\n", where xxx is the number of bytes that follow (remove trailing "\n")
         content_len = int(msg.split(":")[-1])
-        print content_len
-        msg = self.sock.recv(content_len + 1)  # There is one extra "\n" at the end of the message
-        print msg
-        dom = parseString(msg)
+        xml_string = self.sock.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
+        dom = parseString(xml_string)
+        return xml_string
         # TODO: Parse dom structure, we need a list of signals, each entry containing the signal's attributes (sampling rate, block size, ...)
         #       We also might need other meta information such as subject name and other attributes
         #       The list of signals might be a list of dictionaries, e.g. [{'blocksize': 10, 'sampleRate': 100, 'type': 'eeg', 'numChannels', 4}] for one signal
