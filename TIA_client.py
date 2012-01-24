@@ -8,47 +8,47 @@ class TIA_client(object):
     
     def __init__(self):
         """Initializes TIA_client object."""
-        self.sock = None  # FIXME: Is it better to make sock private, i.e. use self.__sock? Or self._sock?
+        self._sock = None
     
     def connect(self, host, port):
         """Connects to server on host:port."""
-        if self.sock != None:  # Socket already exists
+        if self._sock != None:  # Socket already exists
             print "Connection already established."  # FIXME: Better way to handle this warning instead of just using print?
             return
             
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create socket
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create socket
             
         try:
-            self.sock.connect((host, port))  # Connect to host:port
+            self._sock.connect((host, port))  # Connect to host:port
         except socket.error:
-            self.sock.close()
-            self.sock = None
+            self._sock.close()
+            self._sock = None
             print "Error: Cannot establish connection with server."
     
     def close(self):
         """Closes connection to server."""
-        if self.sock != None:
-            self.sock.close()
-            self.sock = None
+        if self._sock != None:
+            self._sock.close()
+            self._sock = None
         else:
             print "Connection already closed."
     
     def check_protocol(self):
         """Returns True if server supports the protocol version implemented by this client."""
-        self.sock.sendall("TiA 1.0\nCheckProtocolVersion\n\n")
-        tia_version = self.__recv_until()  # Contains "TiA 1.0\n"
-        status = self.__recv_until()  # Contains "OK" or "Error"
-        self.sock.recv(1)
+        self._sock.sendall("TiA 1.0\nCheckProtocolVersion\n\n")
+        tia_version = self._recv_until()  # Contains "TiA 1.0\n"
+        status = self._recv_until()  # Contains "OK" or "Error"
+        self._sock.recv(1)
         if status.strip() == "OK":
             return True
         else:
             return False
     
-    def __recv_until(self, suffix="\n"):  # FIXME: Single _ or double __? What's the correct way to mark this function as "private"?
+    def _recv_until(self, suffix="\n"):
         """Reads from socket until the character suffix is in the stream."""
         msg = ""
         while not msg.endswith(suffix):
-            data = self.sock.recv(1)  # Read a fixed number of bytes
+            data = self._sock.recv(1)  # Read a fixed number of bytes
             if not data:
                 raise EOFError("Socket closed before receiving the delimiter.".format(suffix))
             msg += data
@@ -56,13 +56,13 @@ class TIA_client(object):
     
     def get_metainfo(self):
         """Retrieves meta information from the server."""
-        self.sock.sendall("TiA 1.0\nGetMetaInfo\n\n")
+        self._sock.sendall("TiA 1.0\nGetMetaInfo\n\n")
         
-        tia_version = self.__recv_until().strip()  # Contains "TiA 1.0\n" (remove trailing "\n")
-        msg = self.__recv_until().strip()  # Contains "TiA 1.0\n"  # Contains "MetaInfo\n" (remove trailing "\n")
-        msg = self.__recv_until().strip()  # Contains "Content-Length:xxx\n", where xxx is the number of bytes that follow (remove trailing "\n")
+        tia_version = self._recv_until().strip()  # Contains "TiA 1.0\n" (remove trailing "\n")
+        msg = self._recv_until().strip()  # Contains "TiA 1.0\n"  # Contains "MetaInfo\n" (remove trailing "\n")
+        msg = self._recv_until().strip()  # Contains "Content-Length:xxx\n", where xxx is the number of bytes that follow (remove trailing "\n")
         content_len = int(msg.split(":")[-1])
-        xml_string = self.sock.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
+        xml_string = self._sock.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         dom = parseString(xml_string)
         return xml_string
         # TODO: Parse dom structure, we need a list of signals, each entry containing the signal's attributes (sampling rate, block size, ...)
