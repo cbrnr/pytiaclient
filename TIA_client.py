@@ -1,5 +1,5 @@
 import socket
-from xml.dom.minidom import parseString
+from lxml import etree
 
 # FIXME: Should we put the string literals (the commands) we send to the server in some kind of structure? This would make it easier to change the messages.
 
@@ -9,6 +9,7 @@ class TIA_client(object):
     def __init__(self):
         """Initializes TIA_client object."""
         self._sock = None
+        self._metainfo = {"subject": None, "masterSignal": None, "signal": []}
     
     def connect(self, host, port):
         """Connects to server on host:port."""
@@ -44,16 +45,6 @@ class TIA_client(object):
         else:
             return False
     
-    def _recv_until(self, suffix="\n"):
-        """Reads from socket until the character suffix is in the stream."""
-        msg = ""
-        while not msg.endswith(suffix):
-            data = self._sock.recv(1)  # Read a fixed number of bytes
-            if not data:
-                raise EOFError("Socket closed before receiving the delimiter.".format(suffix))
-            msg += data
-        return msg
-    
     def get_metainfo(self):
         """Retrieves meta information from the server."""
         self._sock.sendall("TiA 1.0\nGetMetaInfo\n\n")
@@ -63,12 +54,19 @@ class TIA_client(object):
         msg = self._recv_until().strip()  # Contains "Content-Length:xxx\n", where xxx is the number of bytes that follow (remove trailing "\n")
         content_len = int(msg.split(":")[-1])
         xml_string = self._sock.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
-        dom = parseString(xml_string)
-        return xml_string
-        # TODO: Parse dom structure, we need a list of signals, each entry containing the signal's attributes (sampling rate, block size, ...)
-        #       We also might need other meta information such as subject name and other attributes
-        #       The list of signals might be a list of dictionaries, e.g. [{'blocksize': 10, 'sampleRate': 100, 'type': 'eeg', 'numChannels', 4}] for one signal
-    
+        xml = etree.fromstring(xml_string)
+        
+        self._metainfo = {"subject": None, "masterSignal": None, "signal": []}
+        if xml.find("subject") is not None:
+            self._metainfo["subject"] = dict(xml.find("subject").attrib)
+        if xml.find("masterSignal") is not None:
+            self._metainfo["masterSignal"] = dict(xml.find("masterSignal").attrib)
+        for index, signal in enumerate(xml.findall("signal")):
+            self._metainfo["signal"].append(dict(signal.attrib))
+            self._metainfo["signal"][index]["channels"] = []  # List of channels
+            for channel in signal.findall("channel"):
+                self._metainfo["signal"][index]["channels"].append(channel.attrib)
+        
     def get_data_connection(self, connection):
         """Creates a data connection via TCP or UDP."""
         # TODO: Create new socket (TCP or UDP, depending on connection)
@@ -85,4 +83,14 @@ class TIA_client(object):
         """Creates a state connection."""
         # TODO
     
+    def _recv_until(self, suffix="\n"):
+        """Reads from socket until the character suffix is in the stream."""
+        msg = ""
+        while not msg.endswith(suffix):
+            data = self._sock.recv(1)  # Read a fixed number of bytes
+            if not data:
+                raise EOFError("Socket closed before receiving the delimiter.".format(suffix))
+            msg += data
+        return msg
+
 
