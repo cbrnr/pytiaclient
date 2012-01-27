@@ -1,4 +1,5 @@
 import socket
+import threading
 from lxml import etree
 
 class TIAClient(object):
@@ -76,14 +77,34 @@ class TIAClient(object):
                 self._metainfo["signal"][index]["channels"].append(channel.attrib)
         
     def get_data_connection(self, connection):
-        """Creates a data connection via TCP or UDP."""
-        # TODO: Create new socket (TCP or UDP, depending on connection)
+        """Creates a data connection via TCP or UDP.
+             Input:  connection: "TCP" or "UDP"
+             Output: port number of new data connection
+        """
+        if self._sock == None:
+            raise TIAError("No connection established.")
+        if connection != "TCP" and connection != "UDP":
+            raise TIAError("Connection must be either TCP or UDP.")
+        
+        try:
+            self._sock.sendall("TiA 1.0\nGetDataConnection: " + connection + "\n\n")
+            tia_version = self._recv_until()  # Contains "TiA 1.0\n"
+            port = self._recv_until()  # Contains "OK" or "Error"
+            self._sock.recv(1)
+        except socket.error, EOFError:
+            raise TIAError("Could not get port of new data connection.")
+        
+        if port.find("Error -- Target and remote subnet do not match!") != -1:
+            raise TIAError("Target and remote subnets do not match for UDP data connection.")
+        else:
+            return int(port.split(":")[-1].strip())
     
     def start_data(self):
         """Starts data transmission."""
         # TODO: Start receiving data into buffer
         # Calls _get_data_worker, which runs in a new thread and collects data from the
         # socket buffer and writes it into the internal buffer.
+        
     
     def stop_data(self):
         """Stops data transmission."""
@@ -108,7 +129,7 @@ class TIAClient(object):
             msg += data
         return msg
         
-    def _get_data_worker(self):
+    def _get_data(self):
         pass
 
 
