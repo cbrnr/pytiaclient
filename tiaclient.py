@@ -1,6 +1,9 @@
 import socket
 import threading
+import struct
 from lxml import etree
+
+# TODO: Queries to server and deconding replies should be outsourced into function.
 
 class TIAClient(object):
     """Client for the TIA network protocol (version 1.0)."""
@@ -43,7 +46,7 @@ class TIAClient(object):
             self._sock.recv(1)
         except socket.error, EOFError:
             raise TIAError("Checking protocol version failed.")
-        if status == "OK":
+        if status == "OK":  # FIXME: Maybe raising an exception is better than returning a value here?
             return True
         else:
             return False
@@ -61,8 +64,10 @@ class TIAClient(object):
             xml_string = self._sock.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except socket.error, EOFError:
             raise TIAError("Receiving metainfo failed.")
-
-        xml = etree.fromstring(xml_string)
+        try:
+            xml = etree.fromstring(xml_string)
+        except XMLSyntaxError:
+            raise TIAError("Could not parse XML metainfo because of syntax error.")
         self._metainfo = {"subject": None, "masterSignal": None, "signal": []}
         if xml.find("subject") is not None:
             self._metainfo["subject"] = dict(xml.find("subject").attrib)
@@ -76,11 +81,12 @@ class TIAClient(object):
     
     def start_data(self, connection="TCP"):
         """Starts data transmission."""
-        # TODO: Check that socket exists
-        port = self._get_data_connection("TCP")  # TODO: For now, only TCP data connections are supported
+        if self._sock == None:
+            raise TIAError("No connection established.")
         if self._sock_data != None:
             raise TIAError("Data connection already established.")
         try:
+            port = self._get_data_connection("TCP")  # TODO: For now, only TCP data connections are supported
             self._sock_data = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._sock_data.settimeout(2)
             self._sock_data.connect((self._sock.getpeername()[0], port))  # Connect to same host, but new port
@@ -88,13 +94,24 @@ class TIAClient(object):
             self._sock_data = None
             raise TIAError("Cannot establish data connection.")
         self._thread_running = True
-        t = threading.Thread(target=self._get_data)
-        t.start()
+        try:
+            self._sock.sendall("TiA 1.0\nStartDataTransmission\n\n")
+            tia_version = self._recv_until().strip()  # Contains "TiA 1.0"
+            status = self._recv_until().strip()  # Contains "OK" or "Error"
+            self._sock.recv(1)
+        except socket.error, EOFError:
+            raise TIAError("Starting data transmission failed.")
+        if status != "OK":  # FIXME: Maybe raising an exception is better than returning a value here?
+            raise TIAError("Starting data transmission failed.")
+        #t = threading.Thread(target=self._get_data)
+        #t.start()
+        data = self._get_data()
     
     def stop_data(self):
         """Stops data transmission."""
         self._thread_running = False
         self._sock_data.close()
+        self._sock_data = None
     
     def get_state_connection(self):
         """Creates a state connection."""
@@ -116,8 +133,6 @@ class TIAClient(object):
 
     def _get_data_connection(self, connection):
         """Returns the port number of the new data connection."""
-        if self._sock == None:
-            raise TIAError("No connection established.")
         if connection != "TCP" and connection != "UDP":
             raise TIAError("Data connection must be either TCP or UDP.")
         try:
@@ -137,10 +152,20 @@ class TIAClient(object):
         print "Thread starting..."
         while self._thread_running:
             # TODO: Get all available data from socket and write it into self._buffer
-            pass
+            (d_version, d_size, d_flags, d_id, d_number, d_timestamp) = struct.unpack("<BIIQQQ", self._sock_data.recv(33))
+            
+            break
         print "Thread ending..."
-
+        return data
+        
 
 class TIAError(Exception):
     pass
     
+
+if __name__ == "__main__":
+    client = TIAClient()
+    client.connect("137.110.244.73", 9000)
+    client.start_data()
+    client.stop_data()
+    client.close()
