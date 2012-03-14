@@ -3,3 +3,4 @@ syntax: glob
 .metadata
 .project
 .pydevproject
+.directory
