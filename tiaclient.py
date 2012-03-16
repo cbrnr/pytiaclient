@@ -1,6 +1,7 @@
 import socket
 import threading
 import struct
+import numpy
 import time  # Only needed for test program
 from lxml import etree
 
@@ -123,6 +124,8 @@ class TIAClient(object):
             self._metainfo["signal"][index]["channels"] = []  # List of channels
             for channel in signal.findall("channel"):
                 self._metainfo["signal"][index]["channels"].append(channel.attrib)
+                
+        self._buffer = [[] for _ in range(len(self._metainfo["signal"]))]  # Create empty lists for each signal group, so signal group 0 is self._buffer[0], and so on
 
     def _recv_until(self, suffix="\n"):
         """Reads from socket until the character suffix is in the stream."""
@@ -166,13 +169,15 @@ class TIAClient(object):
             for signals in range(n_signals):
                 tmp = struct.unpack("<H", self._sock_data.recv(2))
                 block_size.append(tmp[0])
-            
+            print "n_channels:", n_channels, "block_size:", block_size
+
             for signal in range(n_signals):  # Read signal blocks
+                data_array = numpy.empty((n_channels[signal], block_size[signal]), dtype=float)
                 for channel in range(n_channels[signal]):
                     for sample in range(block_size[signal]):
-                        data = struct.unpack("<f", self._sock_data.recv(4))
-                        print "Signal block {}, channel {}, sample {}: {}".format(signal + 1, channel + 1, sample + 1, data[0])
-                        # TODO: Write data in buffer
+                        data_array[channel][sample] = struct.unpack("<f", self._sock_data.recv(4))[0]
+                        print "Signal block {}, channel {}, sample {}: {}".format(signal + 1, channel + 1, sample + 1, data_array[channel][sample])
+                self._buffer[signal].append(data_array)
                         
         # Stop data transmission        
         try:
