@@ -11,6 +11,7 @@ from lxml import etree
 SOCKET_TIMEOUT = 2  # Socket timeout (in seconds)
 TIA_VERSION = 1.0
 FIXED_HEADER_SIZE = 33  # Fixed header size (in bytes)
+BUFFER_SIZE = 2  # Buffer size (in MB)
 
 class TIAClient(object):
     """Client for the TIA network protocol (version 1.0)."""
@@ -178,6 +179,11 @@ class TIAClient(object):
                         data_array[channel][sample] = struct.unpack("<f", self._sock_data.recv(4))[0]
                         print "Signal block {}, channel {}, sample {}: {}".format(signal + 1, channel + 1, sample + 1, data_array[channel][sample])
                 self._buffer[signal].append(data_array)
+            print self._get_buffer_size(n_signals, block_size)
+            if self._get_buffer_size(n_signals, block_size) > BUFFER_SIZE:
+                for signal in range(n_signals):
+                    self._buffer[signal].pop(0)
+            
                         
         # Stop data transmission        
         try:
@@ -189,6 +195,13 @@ class TIAClient(object):
             raise TIAError("stop_data(): Stopping data transmission failed.")
         self._sock_data.close()
         self._sock_data = None
+        
+    def _get_buffer_size(self):
+        size = 0
+        for signal in range(n_signals):
+            size += len(self._buffer[signal]) * n_channels[signal] * block_size[signal]
+        size *= 1024**2  # Convert Bytes to MB
+        return size
 
 
 class TIAError(Exception):
