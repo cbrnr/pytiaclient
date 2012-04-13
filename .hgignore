@@ -4,3 +4,4 @@ syntax: glob
 .project
 .pydevproject
 .directory
+*.pyc
