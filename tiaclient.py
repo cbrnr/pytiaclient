@@ -1,7 +1,7 @@
 import socket
 import threading
 import struct
-import time  # Only needed for test program
+import math
 from lxml import etree
 
 # TODO: Include logger
@@ -11,6 +11,10 @@ SOCKET_TIMEOUT = 2  # Socket timeout (in seconds)
 TIA_VERSION = 1.0
 FIXED_HEADER_SIZE = 33  # Fixed header size (in bytes)
 BUFFER_SIZE = 2  # Buffer size (in MB)
+SIGNAL_TYPES = {"eeg": 0, "emg": 1, "eog": 2, "ecg": 3, "hr": 4, "bp": 5, "button": 6,
+                "axes": 7, "sensor": 8, "nirs": 9, "fmri": 10, "keycode": 11, 
+                "user1": 16, "user2": 17, "user3": 18, "user4": 19,
+                "undefined": 20, "event": 21}
 
 class TIAClient(object):
     """Client for the TIA network protocol."""
@@ -158,8 +162,10 @@ class TIAClient(object):
 
     def _get_data(self):
         while self._thread_running:
-            (d_version, d_size, d_flags, d_id, d_number, d_timestamp) = struct.unpack("<BIIQQQ", self._sock_data.recv(FIXED_HEADER_SIZE))  # Get fixed header
-            n_signals = bin(d_flags).count("1")
+            d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(FIXED_HEADER_SIZE))  # Get fixed header
+            signal_types = self._bit_count(d_flags)  # Lists the signal types present in the data packet
+            signal_list = [self._buffer_type.index(k) for k in signal_types]  # Indices into the buffer
+            n_signals = len(signal_list)
             var_header_size = 4 * n_signals
             
             # FIXME: I don't know if these values are needed at all; I could just skip over the variable header
@@ -174,13 +180,12 @@ class TIAClient(object):
                 block_size.append(tmp[0])
             
             with self._buffer_lock:
-                for signal in range(n_signals):  # Read signal blocks
-                    data_array = [[] for _ in range(n_channels[signal])]
-                    for channel in range(n_channels[signal]):
-                        for sample in range(block_size[signal]):
+                for index, signal in enumerate(signal_list):  # Read signal blocks; signal is the index into the buffer
+                    data_array = [[] for _ in range(n_channels[index])]
+                    for channel in range(n_channels[index]):
+                        for sample in range(block_size[index]):
                             data = struct.unpack("<f", self._sock_data.recv(4))[0]
                             self._buffer[signal][channel].append(data)
-                            print "Signal block {}, channel {}, sample {}: {}".format(signal + 1, channel + 1, sample + 1, data)
             # TODO: Check for size of self._buffer and delete oldest sample if buffer is too big
 
         # Stop data transmission        
@@ -198,9 +203,23 @@ class TIAClient(object):
         """Initializes an empty buffer. Requires metainfo to be read first."""
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
         # Each signal group is also a list of channels, and each channel is a list of samples
+        self._buffer_type = []
         self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
         for index, signal in enumerate(self._metainfo["signals"]):
             self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
+            try:
+                self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
+            except KeyError:
+                raise TIAError("_init_buffer(): Unknown signal type found.")
+            
+    def _bit_count(self, number):
+        """Counts the number of high bits in number and returns their integer values in a list."""
+        high_bits = []
+        if number > 0:
+            for mask in range(int(math.ceil(math.log(number, 2))) + 1):
+                if number & int(math.pow(2, mask)):
+                    high_bits.append(mask)
+        return high_bits
 
 
 class TIAError(Exception):
@@ -209,11 +228,9 @@ class TIAError(Exception):
 
 if __name__ == "__main__":
     client = TIAClient()
-    client.connect("137.110.244.73", 9000)
+    client.connect("129.27.145.101", 9000)
     client.start_data()
-    time.sleep(0.5)
-    data1 = client.get_data_chunk()
-    time.sleep(1)
-    data2 = client.get_data_chunk()
+    raw_input("Press Enter to quit.")
+    data = client.get_data_chunk()
     client.stop_data()
     client.close()
