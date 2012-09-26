@@ -65,8 +65,8 @@ class TIAClient(object):
             raise TIAError("start_data(): Cannot establish data connection.")
         try:
             self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION))
-            tia_version = self._recv_until().strip()
-            status = self._recv_until().strip()
+            tia_version = recv_until(self._sock_ctrl).strip()
+            status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
             raise TIAError("start_data(): Starting data transmission failed.")
@@ -99,8 +99,8 @@ class TIAClient(object):
         """Returns True if server supports the protocol version implemented by this client."""
         try:
             self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION))
-            tia_version = self._recv_until().strip()
-            status = self._recv_until().strip()
+            tia_version = recv_until(self._sock_ctrl).strip()
+            status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
             raise TIAError("_check_protocol(): Checking protocol version failed (server might be down).")
@@ -110,9 +110,9 @@ class TIAClient(object):
         """Retrieves meta information from the server."""
         try:
             self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION))
-            tia_version = self._recv_until().strip()
-            msg = self._recv_until().strip()
-            msg = self._recv_until().strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes that follow
+            tia_version = recv_until(self._sock_ctrl).strip()
+            msg = recv_until(self._sock_ctrl).strip()
+            msg = recv_until(self._sock_ctrl).strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes that follow
             content_len = int(msg.split(":")[-1])
             xml_string = self._sock_ctrl.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except socket.error, EOFError:
@@ -134,24 +134,14 @@ class TIAClient(object):
         
         self._init_buffer()
  
-    def _recv_until(self, suffix="\n"):
-        """Reads from socket until the character suffix is in the stream."""
-        msg = ""
-        while not msg.endswith(suffix):
-            data = self._sock_ctrl.recv(1)  # Read a fixed number of bytes
-            if not data:
-                raise EOFError("_recv_until(): Socket closed before receiving the delimiter.")
-            msg += data
-        return msg
-
     def _get_data_connection(self, connection):
         """Returns the port number of the new data connection."""
         if connection != "TCP" and connection != "UDP":
             raise TIAError("_get_data_connection(): Data connection must be either TCP or UDP.")
         try:
             self._sock_ctrl.sendall("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n")
-            tia_version = self._recv_until().strip()
-            port = self._recv_until().strip()
+            tia_version = recv_until(self._sock_ctrl).strip()
+            port = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
             raise TIAError("_get_data_connection(): Could not get port of new data connection.")
@@ -163,7 +153,7 @@ class TIAClient(object):
     def _get_data(self):
         while self._thread_running:
             d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(FIXED_HEADER_SIZE))  # Get fixed header
-            signal_types = self._bit_count(d_flags)  # Lists the signal types present in the data packet
+            signal_types = bit_count(d_flags)  # Lists the signal types present in the data packet
             signal_list = [self._buffer_type.index(k) for k in signal_types]  # Indices into the buffer
             n_signals = len(signal_list)
             var_header_size = 4 * n_signals
@@ -191,8 +181,8 @@ class TIAClient(object):
         # Stop data transmission        
         try:
             self._sock_ctrl.sendall("TiA {}\nStopDataTransmission\n\n".format(TIA_VERSION))
-            tia_version = self._recv_until().strip()
-            status = self._recv_until().strip()
+            tia_version = recv_until(self._sock_ctrl).strip()
+            status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
             raise TIAError("stop_data(): Stopping data transmission failed.")
@@ -211,24 +201,36 @@ class TIAClient(object):
                 self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
             except KeyError:
                 raise TIAError("_init_buffer(): Unknown signal type found.")
-            
-    def _bit_count(self, number):
-        """Counts the number of high bits in number and returns their integer values in a list."""
-        high_bits = []
-        if number > 0:
-            for mask in range(int(math.ceil(math.log(number, 2))) + 1):
-                if number & int(math.pow(2, mask)):
-                    high_bits.append(mask)
-        return high_bits
 
 
 class TIAError(Exception):
     pass
+
+
+# Helper functions
+def recv_until(sock, suffix="\n"):
+    """Reads from socket until the character suffix is in the stream."""
+    msg = ""
+    while not msg.endswith(suffix):
+        data = sock.recv(1)  # Read a fixed number of bytes
+        if not data:
+            raise EOFError("_recv_until(): Socket closed before receiving the delimiter.")
+        msg += data
+    return msg
+    
+def bit_count(number):
+    """Counts the number of high bits in number and returns their integer values in a list."""
+    high_bits = []
+    if number > 0:
+        for mask in range(int(math.ceil(math.log(number, 2))) + 1):
+            if number & int(math.pow(2, mask)):
+                high_bits.append(mask)
+    return high_bits
     
 
 if __name__ == "__main__":
     client = TIAClient()
-    client.connect("129.27.145.101", 9000)
+    client.connect("129.27.145.32", 9000)
     client.start_data()
     raw_input("Press Enter to quit.")
     data = client.get_data_chunk()
