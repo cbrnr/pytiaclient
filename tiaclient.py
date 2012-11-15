@@ -27,16 +27,16 @@ class TIAClient(object):
     def connect(self, host, port):
         """Connects to server on host:port and establishes control connection."""
         if self._sock_ctrl != None:
-            raise TIAError("connect(): Control connection already established.")
+            raise TIAError("Control connection already established.")
         try:
             self._sock_ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._sock_ctrl.settimeout(SOCKET_TIMEOUT)
             self._sock_ctrl.connect((host, port))
         except socket.error:
             self._sock_ctrl = None
-            raise TIAError("connect(): Cannot establish control connection (server might be down).")
+            raise TIAError("Cannot establish control connection (server might be down).")
         if not self._check_protocol():  # Check if protocol is supported by server
-            raise TIAError("connect(): Protocol version {} not supported by server.".format(TIA_VERSION))
+            raise TIAError("Protocol version {} not supported by server.".format(TIA_VERSION))
         self._get_metainfo()
     
     def close(self):
@@ -47,14 +47,14 @@ class TIAClient(object):
             self._sock_ctrl.close()
             self._sock_ctrl = None
         else:
-            raise TIAError("close(): Control connection already closed.")
+            raise TIAError("Control connection already closed.")
     
     def start_data(self, connection="TCP"):
         """Starts data transmission using TCP or UDP."""
         if self._sock_ctrl == None:
-            raise TIAError("start_data(): Control connection to server not established.")
+            raise TIAError("Control connection to server not established.")
         if self._sock_data != None:
-            raise TIAError("start_data(): Data connection already established.")
+            raise TIAError("Data connection already established.")
         try:
             port = self._get_data_connection("TCP")
             self._sock_data = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -62,16 +62,16 @@ class TIAClient(object):
             self._sock_data.connect((self._sock_ctrl.getpeername()[0], port))  # Connect to same host, but new port
         except socket.error:
             self._sock_data = None
-            raise TIAError("start_data(): Cannot establish data connection.")
+            raise TIAError("Cannot establish data connection.")
         try:
             self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
-            raise TIAError("start_data(): Starting data transmission failed.")
+            raise TIAError("Starting data transmission failed.")
         if status != "OK":
-            raise TIAError("start_data(): Starting data transmission failed.")
+            raise TIAError("Starting data transmission failed.")
         self._thread_running = True
         self._data_thread = threading.Thread(target=self._get_data)
         self._buffer_lock = threading.RLock()
@@ -100,10 +100,10 @@ class TIAClient(object):
         try:
             self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
-            status = recv_until(self._sock_ctrl).strip()
+            status = recv_until(self._sock_ctrl).strip()  # TODO: Check if status is really OK
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
-            raise TIAError("_check_protocol(): Checking protocol version failed (server might be down).")
+            raise TIAError("Checking protocol version failed (server might be down).")
         return status == "OK"
     
     def _get_metainfo(self):
@@ -116,11 +116,11 @@ class TIAClient(object):
             content_len = int(msg.split(":")[-1])
             xml_string = self._sock_ctrl.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except socket.error, EOFError:
-            raise TIAError("_get_metainfo(): Receiving meta information failed (server might be down).")
+            raise TIAError("Receiving meta information failed (server might be down).")
         try:
             xml = etree.fromstring(xml_string)
         except etree.XMLSyntaxError:
-            raise TIAError("_get_metainfo(): Error while parsing XML meta information (syntax error).")
+            raise TIAError("Error while parsing XML meta information (syntax error).")
         self._metainfo = {"subject": None, "masterSignal": None, "signals": []}
         if xml.find("subject") is not None:
             self._metainfo["subject"] = dict(xml.find("subject").attrib)
@@ -130,23 +130,23 @@ class TIAClient(object):
             self._metainfo["signals"].append(dict(signal.attrib))
             self._metainfo["signals"][index]["channels"] = []  # List of channels
             for channel in signal.findall("channel"):
-                self._metainfo["signals"][index]["channels"].append(channel.attrib)
+                self._metainfo["signals"][index]["channels"].append(channel.attrib)  # Check if conversion to dict() would make sense
         
         self._init_buffer()
  
     def _get_data_connection(self, connection):
         """Returns the port number of the new data connection."""
         if connection != "TCP" and connection != "UDP":
-            raise TIAError("_get_data_connection(): Data connection must be either TCP or UDP.")
+            raise TIAError("Data connection must be either TCP or UDP.")
         try:
             self._sock_ctrl.sendall("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n")
             tia_version = recv_until(self._sock_ctrl).strip()
             port = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
-            raise TIAError("_get_data_connection(): Could not get port of new data connection.")
+            raise TIAError("Could not get port of new data connection.")
         if port.find("Error -- Target and remote subnet do not match!") != -1:
-            raise TIAError("_get_data_connection(): Target and remote subnets do not match for a UDP data connection.")
+            raise TIAError("Target and remote subnets do not match for a UDP data connection.")
         else:
             return int(port.split(":")[-1])
 
@@ -185,7 +185,7 @@ class TIAClient(object):
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except socket.error, EOFError:
-            raise TIAError("stop_data(): Stopping data transmission failed.")
+            raise TIAError("Stopping data transmission failed.")
         self._sock_data.close()
         self._sock_data = None
         
@@ -200,7 +200,7 @@ class TIAClient(object):
             try:
                 self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
             except KeyError:
-                raise TIAError("_init_buffer(): Unknown signal type found.")
+                raise TIAError("Unknown signal type found.")
 
 
 class TIAError(Exception):
@@ -233,6 +233,6 @@ if __name__ == "__main__":
     client.connect("129.27.145.32", 9000)
     client.start_data()
     raw_input("Press Enter to quit.")
-    data = client.get_data_chunk()
+    data = client.get_data_chunk()  # TODO: get mapping of indices
     client.stop_data()
     client.close()
