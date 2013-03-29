@@ -64,13 +64,13 @@ class TIAClient(object):
             self._sock_data = None
             raise TIAError("Cannot establish data connection.")
         try:
-            self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION).encode("ascii"))
+            self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Starting data transmission failed.")
-        if status != b"OK":
+        if status != "OK":
             raise TIAError("Starting data transmission failed.")
         self._thread_running = True
         self._data_thread = threading.Thread(target=self._get_data)
@@ -85,9 +85,15 @@ class TIAClient(object):
     
     def get_data_chunk(self):
         """Returns the data buffer and clears it."""
+        if not self._thread_running:
+            raise TIAError("Data transmission has not been started.")
+        
         with self._buffer_lock:
             tmp = self._buffer
-            self._init_buffer()
+            self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
+            for index, signal in enumerate(self._metainfo["signals"]):
+                self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
+
             return tmp
 
     def get_state_connection(self):
@@ -98,22 +104,22 @@ class TIAClient(object):
     def _check_protocol(self):
         """Returns True if server supports the protocol version implemented by this client."""
         try:
-            self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION).encode("ascii"))
+            self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()  # TODO: Check if status is really OK
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Checking protocol version failed (server might be down).")
-        return status == b"OK"
+        return status == "OK"
     
     def _get_metainfo(self):
         """Retrieves meta information from the server."""
         try:
-            self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION).encode("ascii"))
+            self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
             msg = recv_until(self._sock_ctrl).strip()
             msg = recv_until(self._sock_ctrl).strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes that follow
-            content_len = int(msg.split(b":")[-1])
+            content_len = int(msg.split(":")[-1])
             xml_string = self._sock_ctrl.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except (socket.error, EOFError):
             raise TIAError("Receiving meta information failed (server might be down).")
@@ -139,22 +145,23 @@ class TIAClient(object):
         if connection != "TCP" and connection != "UDP":
             raise TIAError("Data connection must be either TCP or UDP.")
         try:
-            self._sock_ctrl.sendall(("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n").encode("ascii"))
+            self._sock_ctrl.sendall("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n")
             tia_version = recv_until(self._sock_ctrl).strip()
             port = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Could not get port of new data connection.")
-        if port.find(b"Error -- Target and remote subnet do not match!") != -1:
+        if port.find("Error -- Target and remote subnet do not match!") != -1:
             raise TIAError("Target and remote subnets do not match for a UDP data connection.")
         else:
-            return int(port.split(b":")[-1])
+            return int(port.split(":")[-1])
 
     def _get_data(self):
         while self._thread_running:
             d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(FIXED_HEADER_SIZE))  # Get fixed header
             signal_types = bit_count(d_flags)  # Lists the signal types present in the data packet
             signal_list = [self._buffer_type.index(k) for k in signal_types]  # Indices into the buffer
+
             n_signals = len(signal_list)
             var_header_size = 4 * n_signals
             
@@ -180,7 +187,7 @@ class TIAClient(object):
 
         # Stop data transmission        
         try:
-            self._sock_ctrl.sendall("TiA {}\nStopDataTransmission\n\n".format(TIA_VERSION).encode("ascii"))
+            self._sock_ctrl.sendall("TiA {}\nStopDataTransmission\n\n".format(TIA_VERSION))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
@@ -208,9 +215,9 @@ class TIAError(Exception):
 
 
 # Helper functions
-def recv_until(sock, suffix="\n".encode("ascii")):
+def recv_until(sock, suffix="\n"):
     """Reads from socket until the character suffix is in the stream."""
-    msg = b""
+    msg = ""
     while not msg.endswith(suffix):
         data = sock.recv(1)  # Read a fixed number of bytes
         if not data:
@@ -235,5 +242,4 @@ if __name__ == "__main__":
     raw_input("Press Enter to quit.")
     data = client.get_data_chunk()  # TODO: get mapping of indices
     client.stop_data()
-    print(client._metainfo)
     client.close()
