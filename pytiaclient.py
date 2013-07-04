@@ -95,6 +95,8 @@ class TIAClient(object):
         self._thread_running = True
         self._data_thread = threading.Thread(target=self._get_data)
         self._buffer_lock = threading.RLock()
+        self._buffer_avail = threading.Condition(self._buffer_lock)
+        self._buffer_empty = True
         self._data_thread.start()
     
     def stop_data(self):
@@ -114,6 +116,15 @@ class TIAClient(object):
             for index, signal in enumerate(self._metainfo["signals"]):
                 self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
 
+            return tmp
+            
+    def get_data_chunk_waiting(self):
+        """Returns the data buffer and clears it (blocks until data becomes available)."""
+        with self._buffer_lock:
+            while self._buffer_empty:
+                self._buffer_avail.wait()
+            tmp = self._buffer
+            self._init_buffer()
             return tmp
 
     def get_state_connection(self):
@@ -203,6 +214,9 @@ class TIAClient(object):
                         for sample in range(block_size[index]):
                             data = struct.unpack("<f", self._sock_data.recv(4))[0]
                             self._buffer[signal][channel].append(data)
+                self._buffer_empty = False
+                self._buffer_avail.notify_all()
+                
             # TODO: Check for size of self._buffer and delete oldest sample if buffer is too big
 
         # Stop data transmission        
@@ -220,6 +234,7 @@ class TIAClient(object):
         """Initializes an empty buffer. Requires metainfo to be read first."""
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
         # Each signal group is also a list of channels, and each channel is a list of samples
+        self._buffer_empty = True
         self._buffer_type = []
         self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
         for index, signal in enumerate(self._metainfo["signals"]):
