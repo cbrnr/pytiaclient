@@ -84,13 +84,13 @@ class TIAClient(object):
             self._sock_data = None
             raise TIAError("Cannot establish data connection.")
         try:
-            self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION))
+            self._sock_ctrl.sendall("TiA {}\nStartDataTransmission\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Starting data transmission failed.")
-        if status != "OK":
+        if status != b"OK":
             raise TIAError("Starting data transmission failed.")
         self._thread_running = True
         self._data_thread = threading.Thread(target=self._get_data)
@@ -124,22 +124,22 @@ class TIAClient(object):
     def _check_protocol(self):
         """Returns True if server supports the protocol version implemented by this client."""
         try:
-            self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION))
+            self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()  # TODO: Check if status is really OK
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Checking protocol version failed (server might be down).")
-        return status == "OK"
+        return status == b"OK"
     
     def _get_metainfo(self):
         """Retrieves meta information from the server."""
         try:
-            self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION))
+            self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             msg = recv_until(self._sock_ctrl).strip()
             msg = recv_until(self._sock_ctrl).strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes that follow
-            content_len = int(msg.split(":")[-1])
+            content_len = int(msg.split(b":")[-1])
             xml_string = self._sock_ctrl.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except (socket.error, EOFError):
             raise TIAError("Receiving meta information failed (server might be down).")
@@ -165,16 +165,16 @@ class TIAClient(object):
         if connection != "TCP" and connection != "UDP":
             raise TIAError("Data connection must be either TCP or UDP.")
         try:
-            self._sock_ctrl.sendall("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n")
+            self._sock_ctrl.sendall(("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n").encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             port = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Could not get port of new data connection.")
-        if port.find("Error -- Target and remote subnet do not match!") != -1:
+        if port.find(b"Error -- Target and remote subnet do not match!") != -1:
             raise TIAError("Target and remote subnets do not match for a UDP data connection.")
         else:
-            return int(port.split(":")[-1])
+            return int(port.split(b":")[-1])
 
     def _get_data(self):
         while self._thread_running:
@@ -207,7 +207,7 @@ class TIAClient(object):
 
         # Stop data transmission        
         try:
-            self._sock_ctrl.sendall("TiA {}\nStopDataTransmission\n\n".format(TIA_VERSION))
+            self._sock_ctrl.sendall("TiA {}\nStopDataTransmission\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
@@ -236,9 +236,9 @@ class TIAError(Exception):
 
 # Helper functions
 # TODO: maybe outsource helper functions to separate .py file
-def recv_until(sock, suffix="\n"):
+def recv_until(sock, suffix="\n".encode("ascii")):
     """Reads from socket until the character suffix is in the stream."""
-    msg = ""
+    msg = b""
     while not msg.endswith(suffix):
         data = sock.recv(1)  # Read a fixed number of bytes
         if not data:
@@ -257,10 +257,14 @@ def bit_count(number):
     
 
 if __name__ == "__main__":
+    try:
+        input = raw_input
+    except NameError:
+        pass
     client = TIAClient()
     client.connect("129.27.145.32", 9000)
     client.start_data()
-    raw_input("Press Enter to quit.")
+    input("Press Enter to quit.")
     data = client.get_data_chunk()
     client.stop_data()
     client.close()
