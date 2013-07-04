@@ -92,11 +92,11 @@ class TIAClient(object):
             raise TIAError("Starting data transmission failed.")
         if status != b"OK":
             raise TIAError("Starting data transmission failed.")
+        self._clear_buffer()
         self._thread_running = True
         self._data_thread = threading.Thread(target=self._get_data)
         self._buffer_lock = threading.RLock()
         self._buffer_avail = threading.Condition(self._buffer_lock)
-        self._buffer_empty = True
         self._data_thread.start()
     
     def stop_data(self):
@@ -107,24 +107,23 @@ class TIAClient(object):
     
     def get_data_chunk(self):
         """Returns the data buffer and clears it."""
+        
+        with self._buffer_lock:
+            tmp = self._buffer
+            self._clear_buffer()
+            return tmp
+            
+    def get_data_chunk_waiting(self):
+        """Returns the data buffer and clears it (waits/blocks until data becomes available)."""
+        
         if not self._thread_running:
             raise TIAError("Data transmission has not been started.")
         
         with self._buffer_lock:
-            tmp = self._buffer
-            self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
-            for index, signal in enumerate(self._metainfo["signals"]):
-                self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
-
-            return tmp
-            
-    def get_data_chunk_waiting(self):
-        """Returns the data buffer and clears it (blocks until data becomes available)."""
-        with self._buffer_lock:
             while self._buffer_empty:
                 self._buffer_avail.wait()
             tmp = self._buffer
-            self._init_buffer()
+            self._clear_buffer()
             return tmp
 
     def get_state_connection(self):
@@ -137,7 +136,7 @@ class TIAClient(object):
         try:
             self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
-            status = recv_until(self._sock_ctrl).strip()  # TODO: Check if status is really OK
+            status = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
         except (socket.error, EOFError):
             raise TIAError("Checking protocol version failed (server might be down).")
@@ -167,9 +166,14 @@ class TIAClient(object):
             self._metainfo["signals"].append(dict(signal.attrib))
             self._metainfo["signals"][index]["channels"] = []  # List of channels
             for channel in signal.findall("channel"):
-                self._metainfo["signals"][index]["channels"].append(channel.attrib)  # Check if conversion to dict() would make sense
+                self._metainfo["signals"][index]["channels"].append(channel.attrib)  # TODO: Check if conversion to dict() would make sense
         
-        self._init_buffer()
+        self._buffer_type = []
+        for index, signal in enumerate(self._metainfo["signals"]):
+            try:
+                self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
+            except KeyError:
+                raise TIAError("Unknown signal type found.")
  
     def _get_data_connection(self, connection):
         """Returns the port number of the new data connection."""
@@ -230,19 +234,14 @@ class TIAClient(object):
         self._sock_data.close()
         self._sock_data = None
         
-    def _init_buffer(self):
+    def _clear_buffer(self):
         """Initializes an empty buffer. Requires metainfo to be read first."""
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
         # Each signal group is also a list of channels, and each channel is a list of samples
         self._buffer_empty = True
-        self._buffer_type = []
         self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
         for index, signal in enumerate(self._metainfo["signals"]):
             self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
-            try:
-                self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
-            except KeyError:
-                raise TIAError("Unknown signal type found.")
 
 
 class TIAError(Exception):
@@ -257,7 +256,7 @@ def recv_until(sock, suffix="\n".encode("ascii")):
     while not msg.endswith(suffix):
         data = sock.recv(1)  # Read a fixed number of bytes
         if not data:
-            raise EOFError("_recv_until(): Socket closed before receiving the delimiter.")
+            raise EOFError("Socket closed before receiving the delimiter.")
         msg += data
     return msg
     
@@ -280,6 +279,6 @@ if __name__ == "__main__":
     client.connect("129.27.145.32", 9000)
     client.start_data()
     input("Press Enter to quit.")
-    data = client.get_data_chunk()
+    data = client.get_data_chunk_waiting()
     client.stop_data()
     client.close()
