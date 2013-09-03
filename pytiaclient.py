@@ -22,7 +22,7 @@ import socket
 import threading
 import struct
 import math
-from lxml import etree
+import xml.etree.ElementTree as etree
 
 # TODO: Include logger
 # TODO: Include unit tests?
@@ -277,6 +277,7 @@ if __name__ == "__main__":
         pass
     client = TIAClient()
     client.connect("129.27.145.32", 9000)
+    print(client._metainfo)
     client.start_data()
     input("Press Enter to quit.")
     data = client.get_data_chunk_waiting()
