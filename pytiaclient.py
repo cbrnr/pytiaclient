@@ -164,7 +164,7 @@ class TIAClient(object):
             raise TIAError("Receiving meta information failed (server might be down).")
         try:
             xml = ElementTree.fromstring(xml_string)
-        except ElementTree.XMLSyntaxError:
+        except ElementTree.ParseError:
             raise TIAError("Error while parsing XML meta information (syntax error).")
         if xml.find("subject") is not None:
             self._metainfo["subject"] = dict(xml.find("subject").attrib)
