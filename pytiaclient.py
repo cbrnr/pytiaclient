@@ -22,7 +22,7 @@ import socket
 import threading
 import struct
 import math
-import xml.etree.ElementTree as etree
+import xml.etree.ElementTree as ElementTree
 
 # TODO: Include logger
 # TODO: Include unit tests?
@@ -32,9 +32,10 @@ TIA_VERSION = 1.0
 FIXED_HEADER_SIZE = 33  # Fixed header size (in bytes)
 BUFFER_SIZE = 2  # Buffer size (in MB)
 SIGNAL_TYPES = {"eeg": 0, "emg": 1, "eog": 2, "ecg": 3, "hr": 4, "bp": 5, "button": 6,
-                "axes": 7, "sensor": 8, "nirs": 9, "fmri": 10, "keycode": 11, 
+                "axes": 7, "sensor": 8, "nirs": 9, "fmri": 10, "keycode": 11,
                 "user1": 16, "user2": 17, "user3": 18, "user4": 19,
                 "undefined": 20, "event": 21}
+
 
 class TIAClient(object):
     """Client for the TIA network protocol."""
@@ -42,11 +43,17 @@ class TIAClient(object):
     def __init__(self):
         self._sock_ctrl = None  # Socket for control connection
         self._sock_data = None  # Socket for data connection
+        self._metainfo = {"subject": None, "masterSignal": None, "signals": []}
         self._thread_running = False  # Indicates if data thread is running
-    
+        self._data_thread = None
+        self._buffer_lock = None
+        self._buffer_avail = None
+        self._buffer_type = []
+        self._buffer_empty = True
+
     def connect(self, host, port):
         """Connects to server on host:port and establishes control connection."""
-        if self._sock_ctrl != None:
+        if self._sock_ctrl is not None:
             raise TIAError("Control connection already established.")
         try:
             self._sock_ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,22 +65,22 @@ class TIAClient(object):
         if not self._check_protocol():  # Check if protocol is supported by server
             raise TIAError("Protocol version {} not supported by server.".format(TIA_VERSION))
         self._get_metainfo()
-    
+
     def close(self):
         """Closes control connection to server."""
-        if self._sock_data != None:  # Stop data transmission (if running)
+        if self._sock_data is not None:  # Stop data transmission (if running)
             self.stop_data()
-        if self._sock_ctrl != None:
+        if self._sock_ctrl is not None:
             self._sock_ctrl.close()
             self._sock_ctrl = None
         else:
             raise TIAError("Control connection already closed.")
-    
+
     def start_data(self, connection="TCP"):
         """Starts data transmission using TCP or UDP."""
-        if self._sock_ctrl == None:
+        if self._sock_ctrl is None:
             raise TIAError("Control connection to server not established.")
-        if self._sock_data != None:
+        if self._sock_data is not None:
             raise TIAError("Data connection already established.")
         try:
             port = self._get_data_connection("TCP")
@@ -98,27 +105,27 @@ class TIAClient(object):
         self._buffer_lock = threading.RLock()
         self._buffer_avail = threading.Condition(self._buffer_lock)
         self._data_thread.start()
-    
+
     def stop_data(self):
         """Stops data transmission."""
         if self._thread_running:
             self._thread_running = False  # The data socket is closed in _get_data() when the thread terminates
             self._data_thread.join()
-    
+
     def get_data_chunk(self):
         """Returns the data buffer and clears it."""
-        
+
         with self._buffer_lock:
             tmp = self._buffer
             self._clear_buffer()
             return tmp
-            
+
     def get_data_chunk_waiting(self):
         """Returns the data buffer and clears it (waits/blocks until data becomes available)."""
-        
+
         if not self._thread_running:
             raise TIAError("Data transmission has not been started.")
-        
+
         with self._buffer_lock:
             while self._buffer_empty:
                 self._buffer_avail.wait()
@@ -129,7 +136,7 @@ class TIAClient(object):
     def get_state_connection(self):
         """Creates a state connection."""
         pass
-        # TODO: This method should probably be private. It should run in a separate thread and just receives state messages.
+        # TODO: This method should probably be private, run in a separate thread and just receive state messages.
 
     def _check_protocol(self):
         """Returns True if server supports the protocol version implemented by this client."""
@@ -141,23 +148,24 @@ class TIAClient(object):
         except (socket.error, EOFError):
             raise TIAError("Checking protocol version failed (server might be down).")
         return status == b"OK"
-    
+
     def _get_metainfo(self):
         """Retrieves meta information from the server."""
         try:
             self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             msg = recv_until(self._sock_ctrl).strip()
-            msg = recv_until(self._sock_ctrl).strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes that follow
+            msg = recv_until(
+                self._sock_ctrl).strip()  # Contains "Content-Length:xxx", where "xxx" is the number of bytes
             content_len = int(msg.split(b":")[-1])
-            xml_string = self._sock_ctrl.recv(content_len + 1).strip()  # There is one extra "\n" at the end of the message
+            xml_string = self._sock_ctrl.recv(
+                content_len + 1).strip()  # There is one extra "\n" at the end of the message
         except (socket.error, EOFError):
             raise TIAError("Receiving meta information failed (server might be down).")
         try:
-            xml = etree.fromstring(xml_string)
-        except etree.XMLSyntaxError:
+            xml = ElementTree.fromstring(xml_string)
+        except ElementTree.XMLSyntaxError:
             raise TIAError("Error while parsing XML meta information (syntax error).")
-        self._metainfo = {"subject": None, "masterSignal": None, "signals": []}
         if xml.find("subject") is not None:
             self._metainfo["subject"] = dict(xml.find("subject").attrib)
         if xml.find("masterSignal") is not None:
@@ -166,21 +174,24 @@ class TIAClient(object):
             self._metainfo["signals"].append(dict(signal.attrib))
             self._metainfo["signals"][index]["channels"] = []  # List of channels
             for channel in signal.findall("channel"):
-                self._metainfo["signals"][index]["channels"].append(channel.attrib)  # TODO: Check if conversion to dict() would make sense
-        
+                self._metainfo["signals"][index]["channels"].append(
+                    channel.attrib)  # TODO: Check if conversion to dict() would make sense
+
         self._buffer_type = []
         for index, signal in enumerate(self._metainfo["signals"]):
             try:
-                self._buffer_type.append(SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
+                self._buffer_type.append(
+                    SIGNAL_TYPES[signal["type"]])  # Assign corresponding signal type to each signal group
             except KeyError:
                 raise TIAError("Unknown signal type found.")
- 
+
     def _get_data_connection(self, connection):
         """Returns the port number of the new data connection."""
         if connection != "TCP" and connection != "UDP":
             raise TIAError("Data connection must be either TCP or UDP.")
         try:
-            self._sock_ctrl.sendall(("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n").encode("ascii"))
+            self._sock_ctrl.sendall(
+                ("TiA {}\nGetDataConnection: ".format(TIA_VERSION) + connection + "\n\n").encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
             port = recv_until(self._sock_ctrl).strip()
             self._sock_ctrl.recv(1)
@@ -193,13 +204,14 @@ class TIAClient(object):
 
     def _get_data(self):
         while self._thread_running:
-            d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(FIXED_HEADER_SIZE))  # Get fixed header
+            d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(
+                FIXED_HEADER_SIZE))  # Get fixed header
             signal_types = bit_count(d_flags)  # Lists the signal types present in the data packet
             signal_list = [self._buffer_type.index(k) for k in signal_types]  # Indices into the buffer
 
             n_signals = len(signal_list)
             var_header_size = 4 * n_signals
-            
+
             # FIXME: I don't know if these values are needed at all; I could just skip over the variable header
             # FIXME: After all, these values are available in the meta information!
             n_channels = []
@@ -210,18 +222,17 @@ class TIAClient(object):
             for signals in range(n_signals):
                 tmp = struct.unpack("<H", self._sock_data.recv(2))
                 block_size.append(tmp[0])
-            
+
             with self._buffer_lock:
                 for index, signal in enumerate(signal_list):  # Read signal blocks; signal is the index into the buffer
-                    data_array = [[] for _ in range(n_channels[index])]
                     for channel in range(n_channels[index]):
                         for sample in range(block_size[index]):
                             data = struct.unpack("<f", self._sock_data.recv(4))[0]
                             self._buffer[signal][channel].append(data)
                 self._buffer_empty = False
                 self._buffer_avail.notify_all()
-                
-            # TODO: Check for size of self._buffer and delete oldest sample if buffer is too big
+
+                # TODO: Check for size of self._buffer and delete oldest sample if buffer is too big
 
         # Stop data transmission        
         try:
@@ -233,7 +244,7 @@ class TIAClient(object):
             raise TIAError("Stopping data transmission failed.")
         self._sock_data.close()
         self._sock_data = None
-        
+
     def _clear_buffer(self):
         """Initializes an empty buffer. Requires metainfo to be read first."""
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
@@ -259,7 +270,8 @@ def recv_until(sock, suffix="\n".encode("ascii")):
             raise EOFError("Socket closed before receiving the delimiter.")
         msg += data
     return msg
-    
+
+
 def bit_count(number):
     """Counts the number of high bits in number and returns their integer values in a list."""
     high_bits = []
@@ -268,13 +280,9 @@ def bit_count(number):
             if number & int(math.pow(2, mask)):
                 high_bits.append(mask)
     return high_bits
-    
+
 
 if __name__ == "__main__":
-    try:
-        input = raw_input
-    except NameError:
-        pass
     client = TIAClient()
     client.connect("129.27.145.32", 9000)
     print(client._metainfo)
