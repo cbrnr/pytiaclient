@@ -18,16 +18,16 @@ TO DO
 Example
 -------
 
-import pytiaclient
+    import pytiaclient
 
-client = pytiaclient.TIAClient()
-client.connect("localhost", 9000)  # assumes that a TIA server is running on localhost:9000
-print(client._metainfo)
-client.start_data()
-input("Press Enter to quit.")
-data = client.get_data_chunk_waiting()
-client.stop_data()
-client.close()
+    client = pytiaclient.TIAClient()
+    client.connect("localhost", 9000)  # assumes that a TIA server is running on localhost:9000
+    print(client._metainfo)
+    client.start_data()
+    input("Press Enter to quit.")
+    data = client.get_data_chunk_waiting()
+    client.stop_data()
+    client.close()
 
 Contribute
 ----------
