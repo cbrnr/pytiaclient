@@ -1,19 +1,11 @@
+# This file is part of PyTIAClient.
+# This project is licensed under the GNU GPL (version 3 or higher).
 # Copyright 2013 by Clemens Brunner.
 
-# This file is part of PyTIAClient.
-#
-# PyTIAclient is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# PyTIAclient is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with PyTIAclient. If not, see <http://www.gnu.org/licenses/>.
+
+"""TIA client for Python.
+
+"""
 
 
 import socket
@@ -37,7 +29,12 @@ SIGNAL_TYPES = {"eeg": 0, "emg": 1, "eog": 2, "ecg": 3, "hr": 4, "bp": 5, "butto
 
 
 class TIAClient(object):
-    """Client for the TIA network protocol."""
+    """Client for the TIA network protocol.
+
+    Provides methods to connect to a TIA server, receive meta information about the streams, and stream data over the
+    network.
+
+    """
 
     def __init__(self):
         self._sock_ctrl = None  # Socket for control connection
@@ -52,7 +49,21 @@ class TIAClient(object):
         self._buffer_empty = True
 
     def connect(self, host, port):
-        """Connects to server on host:port and establishes control connection."""
+        """Connects to TIA server and establishes control connection.
+
+        Parameters
+        ----------
+        host : str
+            Host name or IP address.
+        port : int
+            Port number.
+
+        Raises
+        ------
+        TIAError
+            If a connection cannot be established.
+
+        """
         if self._sock_ctrl is not None:
             raise TIAError("Control connection already established.")
         try:
@@ -67,7 +78,14 @@ class TIAClient(object):
         self._get_metainfo()
 
     def close(self):
-        """Closes control connection to server."""
+        """Closes control connection to server.
+
+        Raises
+        ------
+        TIAError
+            If the connection cannot be closed.
+
+        """
         if self._sock_data is not None:  # Stop data transmission (if running)
             self.stop_data()
         if self._sock_ctrl is not None:
@@ -77,7 +95,19 @@ class TIAClient(object):
             raise TIAError("Control connection already closed.")
 
     def start_data(self, connection="TCP"):
-        """Starts data transmission using TCP or UDP."""
+        """Starts data transmission.
+
+        Parameters
+        ----------
+        connection : {"TCP", "UDP"}
+            Connection type used to stream data.
+
+        Raises
+        ------
+        TIAError
+            If the connection cannot be established.
+
+        """
         if self._sock_ctrl is None:
             raise TIAError("Control connection to server not established.")
         if self._sock_data is not None:
@@ -107,22 +137,41 @@ class TIAClient(object):
         self._data_thread.start()
 
     def stop_data(self):
-        """Stops data transmission."""
+        """Stops data transmission.
+
+        """
         if self._thread_running:
             self._thread_running = False  # The data socket is closed in _get_data() when the thread terminates
             self._data_thread.join()
 
     def get_data_chunk(self):
-        """Returns the data buffer and clears it."""
+        """Returns the data buffer and clears it.
 
+        Returns
+        -------
+        buffer
+            Buffer containing all data received so far (since the last call to this method).
+
+        """
         with self._buffer_lock:
             tmp = self._buffer
             self._clear_buffer()
             return tmp
 
     def get_data_chunk_waiting(self):
-        """Returns the data buffer and clears it (waits/blocks until data becomes available)."""
+        """Returns the data buffer and clears it, but waits/blocks until data is available.
 
+        Returns
+        -------
+        buffer
+            Buffer containing all data received so far (since the last call to this method).
+
+        Raises
+        ------
+        TIAError
+            If the data transmission has not been started.
+
+        """
         if not self._thread_running:
             raise TIAError("Data transmission has not been started.")
 
@@ -134,12 +183,26 @@ class TIAClient(object):
             return tmp
 
     def get_state_connection(self):
-        """Creates a state connection."""
+        """Creates a state connection.
+
+        """
         pass
         # TODO: This method should probably be private, run in a separate thread and just receive state messages.
 
     def _check_protocol(self):
-        """Returns True if server supports the protocol version implemented by this client."""
+        """Checks if server supports the protocol version implemented by this client.
+
+        Returns
+        -------
+        bool
+            If the server supports the protocol version implemented by this client, this method returns True.
+
+        Raises
+        ------
+        TIAError
+            If the connection cannot be established.
+
+        """
         try:
             self._sock_ctrl.sendall("TiA {}\nCheckProtocolVersion\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
@@ -150,7 +213,14 @@ class TIAClient(object):
         return status == b"OK"
 
     def _get_metainfo(self):
-        """Retrieves meta information from the server."""
+        """Retrieves meta information from the server.
+
+        Raises
+        ------
+        TIAError
+            If the connection cannot be established or the meta information cannot be parsed.
+
+        """
         try:
             self._sock_ctrl.sendall("TiA {}\nGetMetaInfo\n\n".format(TIA_VERSION).encode("ascii"))
             tia_version = recv_until(self._sock_ctrl).strip()
@@ -186,7 +256,24 @@ class TIAClient(object):
                 raise TIAError("Unknown signal type found.")
 
     def _get_data_connection(self, connection):
-        """Returns the port number of the new data connection."""
+        """Determines the port number of the new data connection.
+
+        Parameters
+        ----------
+        connection : {"TCP", "UDP"}
+            Connection type used to stream data.
+
+        Returns
+        -------
+        int
+            Port number of the new data connection.
+
+        Raises
+        ------
+        TIAError
+            If the connection cannot be established.
+
+        """
         if connection != "TCP" and connection != "UDP":
             raise TIAError("Data connection must be either TCP or UDP.")
         try:
@@ -203,6 +290,14 @@ class TIAClient(object):
             return int(port.split(b":")[-1])
 
     def _get_data(self):
+        """Receive data from server and store it in buffer.
+
+        Raises
+        ------
+        TIAError
+            If the data connection cannot be closed properly.
+
+        """
         while self._thread_running:
             d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(
                 FIXED_HEADER_SIZE))  # Get fixed header
@@ -246,7 +341,11 @@ class TIAClient(object):
         self._sock_data = None
 
     def _clear_buffer(self):
-        """Initializes an empty buffer. Requires metainfo to be read first."""
+        """Initializes an empty buffer.
+
+        Requires meta information to be read first.
+
+        """
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
         # Each signal group is also a list of channels, and each channel is a list of samples
         self._buffer_empty = True
@@ -256,4 +355,7 @@ class TIAClient(object):
 
 
 class TIAError(Exception):
+    """Exception for all TIA-related errors.
+
+    """
     pass

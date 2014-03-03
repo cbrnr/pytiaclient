@@ -1,8 +1,29 @@
+# This file is part of PyTIAClient.
+# This project is licensed under the GNU GPL (version 3 or higher).
+# Copyright 2013 by Clemens Brunner.
+
+
+"""Utility functions.
+
+"""
+
+
 import math
 
 
 def recv_until(sock, suffix="\n".encode("ascii")):
-    """Reads from socket until the character suffix is in the stream."""
+    """Reads from a socket until the specified character suffix is in the stream.
+
+    Parameters
+    ----------
+    suffix : str, optional
+
+    Returns
+    -------
+    str
+        Received string.
+
+    """
     msg = b""
     while not msg.endswith(suffix):
         data = sock.recv(1)  # Read a fixed number of bytes
@@ -13,7 +34,24 @@ def recv_until(sock, suffix="\n".encode("ascii")):
 
 
 def bitcount(number):
-    """Counts the number of high bits in number and returns their integer values in a list."""
+    """Determines the positions of high bits in a number.
+
+    Parameters
+    ----------
+    number : int
+        Integer number.
+
+    Returns
+    -------
+    list of int
+        Contains the positions of high bits (1s) in the binary representation of the input number.
+
+    Examples
+    --------
+    >>> bits = bitcount(15)  # bits = [0, 1, 2, 3]
+    >>> bits = bitcount(16)  # bits = [4]
+
+    """
     high_bits = []
     if number > 0:
         for mask in range(int(math.ceil(math.log(number, 2))) + 1):
