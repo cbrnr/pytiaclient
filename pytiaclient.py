@@ -2,20 +2,20 @@
 
 # Copyright 2013 by Clemens Brunner.
 
-# This file is part of Pytiaclient.
+# This file is part of PyTIAclient.
 #
-# Pytiaclient is free software: you can redistribute it and/or modify
+# PyTIAclient is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Pytiaclient is distributed in the hope that it will be useful,
+# PyTIAclient is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Pytiaclient. If not, see <http://www.gnu.org/licenses/>.
+# along with PyTIAclient. If not, see <http://www.gnu.org/licenses/>.
 
 
 import socket
@@ -46,6 +46,7 @@ class TIAClient(object):
         self._metainfo = {"subject": None, "masterSignal": None, "signals": []}
         self._thread_running = False  # Indicates if data thread is running
         self._data_thread = None
+        self._buffer = None
         self._buffer_lock = None
         self._buffer_avail = None
         self._buffer_type = []
@@ -284,7 +285,7 @@ def bit_count(number):
 
 if __name__ == "__main__":
     client = TIAClient()
-    client.connect("129.27.145.32", 9000)
+    client.connect("localhost", 9000)
     print(client._metainfo)
     client.start_data()
     input("Press Enter to quit.")
