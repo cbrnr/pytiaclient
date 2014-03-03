@@ -1,7 +1,7 @@
 PyTIAclient
 ===========
 
-PyTIAclient is a client for the TOBI Interface A (TIA) protocol, a protocol to transmit measurement data over the network.
+PyTIAClient is a client for the TOBI Interface A (TIA) protocol, a protocol to transmit measurement data over the network.
 
 Features
 --------
@@ -18,7 +18,7 @@ TO DO
 Example
 -------
 
-    from pytiaclient import pytiaclient
+    import pytiaclient
 
     client = pytiaclient.TIAClient()
     client.connect("localhost", 9000)  # assumes that a TIA server is running on localhost:9000
@@ -33,13 +33,13 @@ Contribute
 ----------
 
 - Project website: https://sourceforge.net/projects/pytiaclient/
-- Issue tracker: https://sourceforge.net/p/pytiaclient/tickets/?source=navbar
+- Issue tracker: https://sourceforge.net/p/pytiaclient/tickets/
 - Source code: http://hg.code.sf.net/p/pytiaclient/code
 
 Support
 -------
 
-Please let me know if you are having issues with PyTIAclient (for example by creating a new ticket).
+Please let me know if you are having issues with PyTIAClient (for example by creating a new ticket).
 
 License
 -------

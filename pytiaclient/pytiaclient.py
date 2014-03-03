@@ -1,8 +1,6 @@
-#!/usr/bin/env python2
-
 # Copyright 2013 by Clemens Brunner.
 
-# This file is part of PyTIAclient.
+# This file is part of PyTIAClient.
 #
 # PyTIAclient is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,8 +19,9 @@
 import socket
 import threading
 import struct
-import math
 import xml.etree.ElementTree as ElementTree
+
+from .utils import recv_until, bitcount
 
 # TODO: Include logger
 # TODO: Include unit tests?
@@ -30,7 +29,7 @@ import xml.etree.ElementTree as ElementTree
 SOCKET_TIMEOUT = 2  # Socket timeout (in seconds)
 TIA_VERSION = 1.0
 FIXED_HEADER_SIZE = 33  # Fixed header size (in bytes)
-BUFFER_SIZE = 2  # Buffer size (in MB)
+BUFFER_SIZE = 2  # TODO: Implement buffer size limit
 SIGNAL_TYPES = {"eeg": 0, "emg": 1, "eog": 2, "ecg": 3, "hr": 4, "bp": 5, "button": 6,
                 "axes": 7, "sensor": 8, "nirs": 9, "fmri": 10, "keycode": 11,
                 "user1": 16, "user2": 17, "user3": 18, "user4": 19,
@@ -207,7 +206,7 @@ class TIAClient(object):
         while self._thread_running:
             d_version, d_size, d_flags, d_id, d_number, d_timestamp = struct.unpack("<BIIQQQ", self._sock_data.recv(
                 FIXED_HEADER_SIZE))  # Get fixed header
-            signal_types = bit_count(d_flags)  # Lists the signal types present in the data packet
+            signal_types = bitcount(d_flags)  # Lists the signal types present in the data packet
             signal_list = [self._buffer_type.index(k) for k in signal_types]  # Indices into the buffer
 
             n_signals = len(signal_list)
@@ -258,37 +257,3 @@ class TIAClient(object):
 
 class TIAError(Exception):
     pass
-
-
-# Helper functions
-# TODO: maybe outsource helper functions to separate .py file
-def recv_until(sock, suffix="\n".encode("ascii")):
-    """Reads from socket until the character suffix is in the stream."""
-    msg = b""
-    while not msg.endswith(suffix):
-        data = sock.recv(1)  # Read a fixed number of bytes
-        if not data:
-            raise EOFError("Socket closed before receiving the delimiter.")
-        msg += data
-    return msg
-
-
-def bit_count(number):
-    """Counts the number of high bits in number and returns their integer values in a list."""
-    high_bits = []
-    if number > 0:
-        for mask in range(int(math.ceil(math.log(number, 2))) + 1):
-            if number & int(math.pow(2, mask)):
-                high_bits.append(mask)
-    return high_bits
-
-
-if __name__ == "__main__":
-    client = TIAClient()
-    client.connect("localhost", 9000)
-    print(client._metainfo)
-    client.start_data()
-    input("Press Enter to quit.")
-    data = client.get_data_chunk_waiting()
-    client.stop_data()
-    client.close()

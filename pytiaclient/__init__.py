@@ -1,1 +1,1 @@
-from . import pytiaclient
+from .pytiaclient import TIAClient, TIAError
