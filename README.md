@@ -18,7 +18,7 @@ TO DO
 Example
 -------
 
-    import pytiaclient
+    from pytiaclient import pytiaclient
 
     client = pytiaclient.TIAClient()
     client.connect("localhost", 9000)  # assumes that a TIA server is running on localhost:9000
