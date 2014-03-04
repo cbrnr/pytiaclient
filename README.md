@@ -39,9 +39,9 @@ Contribute
 Support
 -------
 
-Please let me know if you are having issues with PyTIAClient (for example by creating a new ticket).
+Please let me know if you are having issues with PyTIAClient (for example by creating a new ticket or via email).
 
 License
 -------
 
-This project is licensed under the GNU GPL version 3.
+This project is licensed under the GNU GPL (version 3 or higher). Copyright 2013 by Clemens Brunner <clemens.brunner@tugraz.at>.

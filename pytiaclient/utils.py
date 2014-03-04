@@ -48,9 +48,9 @@ def bitcount(number):
 
     Examples
     --------
-    >>> bits = bitcount(15)
+    >>> bitcount(15)
     [0, 1, 2, 3]
-    >>> bits = bitcount(16)
+    >>> bitcount(16)
     [4]
 
     """
