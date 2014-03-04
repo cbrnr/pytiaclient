@@ -18,6 +18,10 @@ from .utils import recv_until, bitcount
 # TODO: Include logger
 # TODO: Include unit tests?
 
+
+__version__ = "1.0.0"
+
+
 SOCKET_TIMEOUT = 2  # Socket timeout (in seconds)
 TIA_VERSION = 1.0
 FIXED_HEADER_SIZE = 33  # Fixed header size (in bytes)
