@@ -1,6 +1,6 @@
 # This file is part of PyTIAClient.
 # This project is licensed under the GNU GPL (version 3 or higher).
-# Copyright 2013 by Clemens Brunner.
+# Copyright 2014 by Clemens Brunner.
 
 
 """Utility functions.
