@@ -104,7 +104,7 @@ class TIAClient(object):
         Parameters
         ----------
         connection : {"TCP", "UDP"}
-            Connection type used to stream data.
+            Connection type used to stream data. Currently, only TCP connections are supported.
 
         Raises
         ------
@@ -116,6 +116,8 @@ class TIAClient(object):
             raise TIAError("Control connection to server not established.")
         if self._sock_data is not None:
             raise TIAError("Data connection already established.")
+        if connection != "TCP":
+            raise NotImplementedError("UDP connection has not been implemented yet.")
         try:
             port = self._get_data_connection("TCP")
             self._sock_data = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
