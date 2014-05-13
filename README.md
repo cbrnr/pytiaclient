@@ -1,7 +1,7 @@
 PyTIAclient
 ===========
 
-PyTIAClient is a Python client for the TOBI Interface A (TIA) protocol, a protocol to transmit measurement data over the network.
+PyTIAClient is a Python client for the [TOBI Interface A (TIA)](http://tools4bci.sourceforge.net/tia.html) protocol, a protocol to transmit measurement data over the network.
 
 Features
 --------
