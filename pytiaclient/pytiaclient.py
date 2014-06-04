@@ -150,22 +150,13 @@ class TIAClient(object):
             self._thread_running = False  # The data socket is closed in _get_data() when the thread terminates
             self._data_thread.join()
 
-    def get_data_chunk(self):
+    def get_data_chunk(self, blocking=False):
         """Returns the data buffer and clears it.
 
-        Returns
-        -------
-        buffer
-            Buffer containing all data received so far (since the last call to this method).
-
-        """
-        with self._buffer_lock:
-            tmp = self._buffer
-            self._clear_buffer()
-            return tmp
-
-    def get_data_chunk_waiting(self):
-        """Returns the data buffer and clears it, but waits/blocks until data is available.
+        Parameters
+        ----------
+        blocking : bool
+            If set to True, blocks/waits until data is available.
 
         Returns
         -------
@@ -182,7 +173,7 @@ class TIAClient(object):
             raise TIAError("Data transmission has not been started.")
 
         with self._buffer_lock:
-            while self._buffer_empty:
+            while self._buffer_empty and blocking:
                 self._buffer_avail.wait()
             tmp = self._buffer
             self._clear_buffer()
