@@ -150,18 +150,26 @@ class TIAClient(object):
             self._thread_running = False  # The data socket is closed in _get_data() when the thread terminates
             self._data_thread.join()
 
-    def get_data_chunk(self, blocking=False):
+    def get_data_chunk(self, blocking=False, timestamps=False):
         """Returns the data buffer and clears it.
 
         Parameters
         ----------
         blocking : bool
             If set to True, blocks/waits until data is available.
+        timestamps : bool
+            If set to True, the function returns a tuple consisting of data and
+            timestamps; otherwise, it returns only the data (see below).
 
         Returns
         -------
+        If timestamps is set to False (default):
         buffer
-            Buffer containing all data received so far (since the last call to this method).
+            Buffer containing all data received since the last call.
+
+        If timestamps is set to True:
+        (buffer, timestamps)
+            Tuple containing data and timestamps.
 
         Raises
         ------
@@ -175,9 +183,13 @@ class TIAClient(object):
         with self._buffer_lock:
             while self._buffer_empty and blocking:
                 self._buffer_avail.wait()
-            tmp = self._buffer
+            data = self._buffer
+            time = self._timestamps
             self._clear_buffer()
-            return tmp
+            if timestamps:
+                return data, time
+            else:
+                return data
 
     def get_state_connection(self):
         """Creates a state connection.
@@ -316,6 +328,7 @@ class TIAClient(object):
                 block_size.append(tmp[0])
 
             with self._buffer_lock:
+                self._timestamps.append(d_timestamp)
                 for index, signal in enumerate(signal_list):  # Read signal blocks; signal is the index into the buffer
                     for channel in range(n_channels[index]):
                         for sample in range(block_size[index]):
@@ -346,6 +359,7 @@ class TIAClient(object):
         # Each signal group is a list entry, so the first signal group is in self._buffer[0]
         # Each signal group is also a list of channels, and each channel is a list of samples
         self._buffer_empty = True
+        self._timestamps = []
         self._buffer = [[] for _ in range(len(self._metainfo["signals"]))]  # Empty list for each signal group
         for index, signal in enumerate(self._metainfo["signals"]):
             self._buffer[index] = [[] for _ in range(int(signal["numChannels"]))]  # Empty list for each channel
